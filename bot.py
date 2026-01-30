@@ -3,51 +3,42 @@ import asyncio
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
-    MessageHandler,
     ContextTypes,
+    MessageHandler,
     filters
 )
 
 TOKEN = os.environ.get("BOT_TOKEN")
-DELETE_AFTER = 86400  # 24 hours
 
-async def is_admin(context, chat_id, user_id):
-    admins = await context.bot.get_chat_administrators(chat_id)
-    return any(admin.user.id == user_id for admin in admins)
+async def auto_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    user = message.from_user
 
-async def auto_delete_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-    if not msg:
+    # admin হলে skip
+    admins = await context.bot.get_chat_administrators(message.chat_id)
+    admin_ids = [admin.user.id for admin in admins]
+
+    if user.id in admin_ids:
         return
 
-    chat_id = msg.chat.id
-    user_id = msg.from_user.id
+    # 24 ঘণ্টা পরে delete
+    await asyncio.sleep(86400)
+    try:
+        await message.delete()
+    except:
+        pass
 
-    # Admin check
-    if await is_admin(context, chat_id, user_id):
-        return  # Admin messages stay
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    async def delayed_delete():
-        await asyncio.sleep(DELETE_AFTER)
-        try:
-            await context.bot.delete_message(chat_id, msg.message_id)
-        except:
-            pass
-
-    context.application.create_task(delayed_delete())
-
-# --- App ---
-app = ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(
-    MessageHandler(
-        filters.TEXT
-        | filters.PHOTO
-        | filters.VIDEO
-        | filters.STICKER
-        | filters.ANIMATION,
-        auto_delete_handler
+    app.add_handler(
+        MessageHandler(
+            filters.PHOTO | filters.VIDEO | filters.TEXT | filters.Sticker.ALL | filters.ANIMATION,
+            auto_delete
+        )
     )
-)
 
-app.run_polling()
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
